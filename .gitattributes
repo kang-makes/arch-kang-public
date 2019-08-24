@@ -1,0 +1,6 @@
+packages/ca-certificates-fnmt-201611-2-any.pkg.tar.xz filter=lfs diff=lfs merge=lfs -text
+packages/repo.db filter=lfs diff=lfs merge=lfs -text
+packages/repo.db.tar.xz filter=lfs diff=lfs merge=lfs -text
+packages/repo.files filter=lfs diff=lfs merge=lfs -text
+packages/repo.files.tar.xz filter=lfs diff=lfs merge=lfs -text
+packages/stern-bin-1.10.0-2-x86_64.pkg.tar.xz filter=lfs diff=lfs merge=lfs -text
