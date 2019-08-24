@@ -1,0 +1,38 @@
+#!/bin/bash
+
+echo Getting archiso release date
+archiso_release=$(curl -sL https://www.archlinux.org/releng/netboot/archlinux.ipxe | grep -E "^set release ..........$" | cut -d\  -f3 )
+archiso_release=${archiso_release//./\/}
+
+echo Getting kernel available on that date
+kernel_and_sig=( $(curl -sL https://archive.archlinux.org/repos/$archiso_release/core/os/x86_64 | xmllint --html --xpath '/html/body/pre/a/node()' - | grep -E "^linux-[0-9*\.]") )
+
+tmpdir=$(mktemp -d)
+
+for filename in "${kernel_and_sig[@]}"; do
+  echo Downloading $filename
+  curl -sL -C - https://archive.archlinux.org/repos/$archiso_release/core/os/x86_64/$filename -o $tmpdir/$filename
+done
+
+if [[ ${kernel_and_sig[0]} =~ .*sig$ ]]; then
+  if ! gpg --homedir /etc/pacman.d/gnupg --verify $tmpdir/${kernel_and_sig[0]} $tmpdir/${kernel_and_sig[1]} > /dev/null 2>&1; then
+    echo "Bootstrap image is malformed or pacman-key has not been populated"
+    exit 1
+  fi
+else
+  if ! gpg --homedir /etc/pacman.d/gnupg --verify $tmpdir/${kernel_and_sig[1]} $tmpdir/${kernel_and_sig[0]} > /dev/null 2>&1; then
+    echo "Bootstrap image is malformed or pacman-key has not been populated"
+    exit 1
+  fi
+fi
+
+echo "Deleting old kernels (if exists)"
+for file in archiso/linux-[0-9].*; do
+  if [ -s "$file" ]; then 
+    rm -v $file
+  fi
+done
+
+mv -v $tmpdir/* archiso/
+
+rmdir $tmpdir

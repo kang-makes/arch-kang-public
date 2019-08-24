@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+
+import yaml
+import requests
+import datetime
+import os
+import argparse
+import logging
+import sys
+
+from git import Repo, RepositoryDirtyError, InvalidGitRepositoryError
+
+class Errors():
+  """Errorlevels returns on diferente runtime errors"""
+  NOERROR = 0
+  INVALIDPATH = 1
+  UNCLEANREPO = 2
+  NOCONF=3
+
+
+
+class InvalidVariable(Exception):
+  """
+  Exception raised when an invalid variable is found
+  """
+  def __init__(self, message):
+    """Store Exception message"""
+    self.message = message
+  def getMessage(self):
+    """Retrieve Exception message"""
+    return self.message
+
+
+
+class Configuration():
+  """
+  Contains all the info needed for a Relase to be uploaded correctly.
+  """
+  OWNER = ""
+  REPO = ""
+  token = None
+
+  repo = None
+
+  def __init__(self, arguments):
+    logger = logging.getLogger("Configuration.__init__")
+
+    if os.path.isfile(arguments.conf):
+      logger.debug("%s exists and is being loaded", arguments.conf)
+      configuration_file = open(arguments.conf, "r")
+      unmarshalled_yaml = yaml.safe_load(configuration_file)
+      configuration_file.close()
+
+    token_yaml = unmarshalled_yaml["token"] if "token" in unmarshalled_yaml else None
+    token_env = os.environ["TOKEN"] if "TOKEN" in os.environ else None
+    token_argv = arguments.token
+    # Token precedence is yaml then environment (name: TOKEN) then argv flag
+    self.token = token_argv or token_env or token_yaml
+
+    # if self.token is None:
+    #   raise InvalidVariable("No GitHub api token has been provided")
+    # elif not GitHub(self).test_connection():
+    #   raise InvalidVariable("Provided GitHub api token has no access or repo does not exists")
+
+    try: 
+      self.repo = Repo(arguments.repo)
+    except InvalidGitRepositoryError as ex:
+      logger.debug("Unable to load a repository")
+      raise ex
+
+    if self.repo.is_dirty():
+      message = "Working repo should be clean at tool start."
+      logger.warn(message)
+      if not arguments.debug:
+        raise RepositoryDirtyError(repo, message)
+
+
+
+class GitHub():
+  """Abstraction for this tools of the GitHub's API that we need"""
+  SCHEMA = "https"
+  DOMAIN = "api.github.com"
+  URLS = {
+    "RELEASES": "{SCHEMA}://{DOMAIN}/repos/{OWNER}/{REPO}/releases"
+  }
+
+  token = None
+  configuration = None
+
+  def __init__(self, configuration):
+    self.token = configuration.token
+    for key, value in self.URLS.items():
+      
+      self.URLS[key] = value.format(vars(self))
+    pass
+
+  def test_connection(self):
+    logger = logging.getLogger("GitHub.test_connection")
+    response = requests.post(URL.format(**FORMAT), data="")
+
+class Release():
+  """This class is the abstration of a GitHub release"""
+  def __init__(self, configuration, releaseJSON):
+    """Constructor that create a GitHub release from an existing one"""
+    logger = logging.getLogger("Release.__init__(w/release)")
+    # TODO: Do this shit
+    pass
+
+  def __init__(self, configuration):
+    """Constructor that create a new GitHub release in pre-release mode"""
+    logger = logging.getLogger("Release.__init__")
+    today = datetime.datetime.now().strftime("%Y%m%d")
+    # TODO: Do this shit
+    pass
+
+
+def update_releases(repo):
+  """
+  Given a valid initilized repo will try to update all submodules
+  
+  This function will return a list of updated submodules
+  """
+  
+  submodules_updated = []
+
+  for submodule in repo.submodules:
+    submodule.update(init=True, to_latest_revision=True)
+    if submodule.hexsha != submodule.module().head.commit.hexsha:
+      print("test")
+      submodules_updated.append(submodule)
+
+  return submodules_updated
+
+
+def main():
+  """
+  Allow to create an arch repo based on packages on a folder that should have submodules pointing to AUR packages.
+  
+  This tool will try to update all submodules and if a submodule is updated will compile new packages to be uploaded
+  into the new release.
+
+  Then, a new commit will be made including plain databases so they can be diffed, tagged with today's ISO date and
+  a new release will be uploaded.
+  """
+
+  parser = argparse.ArgumentParser(description=main.__doc__)
+  parser.add_argument("repo",         
+                      type=str,
+                      nargs="?",
+                      default=os.getcwd(),
+                      help="Path to the repo (default: current directory)")
+  parser.add_argument("--conf",  "-c",
+                      type=str,
+                      nargs="?",
+                      default="repo.yaml",
+                      help="YAML with the repo configuration (default: repo.yaml)")
+  parser.add_argument("--token", "-t",
+                      type=str,
+                      nargs="?",
+                      help="GitHub token. Token precedence is yaml then environment (name: TOKEN) then this flag.")
+  parser.add_argument("--debug", "-d",
+                      action="store_true",
+                      help="Add debugging logging and don't stop on dirty repository area.")
+
+  try:
+    args = parser.parse_args()
+
+    level = logging.DEBUG if args.debug else logging.WARN
+    logging.basicConfig(level=level, format="[%(levelname)-7s][%(name)-30s] %(message)s")
+    logger = logging.getLogger(__name__)
+    logger.debug("Logging started at {}".format(datetime.datetime.now()))
+
+    conf = Configuration(args)
+
+    updated_submodules = update_releases(conf.repo)
+
+    print(updated_submodules)
+
+    repos.index.add([submodule])
+    repos.index.commit("updated submodule to 'wanted commit'")
+
+    # commit = repo.submodule_update(recursive=False)
+    # repo.index.commit("Submodules updated")
+    # 
+    # # Create a release
+    # response = requests.post(URL.format(**FORMAT), data="")
+    # print(resp.text)
+  except InvalidGitRepositoryError as ex:
+    logger.error("The current path or the path provided is not a git repository.")
+    return Errors.INVALIDPATH
+  except RepositoryDirtyError as ex:
+    logger.error("Git repo is dirty. Commit or clean and rerun this tool.")
+    return Errors.UNCLEANREPO
+  except InvalidVariable as ex:
+    logger.error("A invalid configuration has been detected.")
+    logger.error(ex.getMessage())
+    return Errors.NOCONF
+
+if __name__ == "__main__":
+  sys.exit(main())

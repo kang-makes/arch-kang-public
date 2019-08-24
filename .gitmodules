@@ -1,0 +1,57 @@
+[submodule "aur-repos/ca-certificates-fnmt"]
+	path = aur-repos/ca-certificates-fnmt
+	url = https://aur.archlinux.org/ca-certificates-fnmt.git
+[submodule "aur-repos/freecad-appimage"]
+	path = aur-repos/freecad-appimage
+	url = https://aur.archlinux.org/freecad-appimage.git
+[submodule "aur-repos/kubeadm-bin"]
+	path = aur-repos/kubeadm-bin
+	url = https://aur.archlinux.org/kubeadm-bin.git
+[submodule "aur-repos/kubelet-bin"]
+	path = aur-repos/kubelet-bin
+	url = https://aur.archlinux.org/kubelet-bin.git
+[submodule "aur-repos/kubernetes-cni-bin"]
+	path = aur-repos/kubernetes-cni-bin
+	url = https://aur.archlinux.org/kubernetes-cni-bin.git
+[submodule "aur-repos/kubernetes-helm-bin"]
+	path = aur-repos/kubernetes-helm-bin
+	url = https://aur.archlinux.org/kubernetes-helm-bin.git
+[submodule "aur-repos/nagstamon"]
+	path = aur-repos/nagstamon
+	url = https://aur.archlinux.org/nagstamon.git
+[submodule "aur-repos/nitroshare"]
+	path = aur-repos/nitroshare
+	url = https://aur.archlinux.org/nitroshare.git
+[submodule "aur-repos/nodejs-asciicast2gif"]
+	path = aur-repos/nodejs-asciicast2gif
+	url = https://aur.archlinux.org/nodejs-asciicast2gif.git
+[submodule "aur-repos/origin-client-bin"]
+	path = aur-repos/origin-client-bin
+	url = https://aur.archlinux.org/origin-client-bin.git
+[submodule "aur-repos/pidgin-sipe"]
+	path = aur-repos/pidgin-sipe
+	url = https://aur.archlinux.org/pidgin-sipe.git
+[submodule "aur-repos/python-pyzfscmds"]
+	path = aur-repos/python-pyzfscmds
+	url = https://aur.archlinux.org/python-pyzfscmds.git
+[submodule "aur-repos/skypeforlinux-stable-bin"]
+	path = aur-repos/skypeforlinux-stable-bin
+	url = https://aur.archlinux.org/skypeforlinux-stable-bin.git
+[submodule "aur-repos/slack-desktop"]
+	path = aur-repos/slack-desktop
+	url = https://aur.archlinux.org/slack-desktop.git
+[submodule "aur-repos/stern-bin"]
+	path = aur-repos/stern-bin
+	url = https://aur.archlinux.org/stern-bin.git
+[submodule "aur-repos/vault-bin"]
+	path = aur-repos/vault-bin
+	url = https://aur.archlinux.org/vault-bin.git
+[submodule "aur-repos/vscodium-bin"]
+	path = aur-repos/vscodium-bin
+	url = https://aur.archlinux.org/vscodium-bin.git
+[submodule "aur-repos/zedenv"]
+	path = aur-repos/zedenv
+	url = https://aur.archlinux.org/zedenv.git
+[submodule "aur-repos/zedenv-grub"]
+	path = aur-repos/zedenv-grub
+	url = https://aur.archlinux.org/zedenv-grub.git
