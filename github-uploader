@@ -123,10 +123,8 @@ class GitHub():
 
 class ReleaseUploader():
   def __init__(self, repo_service, release, files):
-    today = datetime.datetime.now().strftime("%Y%m%d")
     self.repo = repo_service
     self.release = release
-
     self.files = [ file for file in files if os.path.isfile(file) ]
 
   def unroll_path(input_path):
@@ -150,8 +148,7 @@ class ReleaseUploader():
     if len(self.files) == 0:
       return {"error": Errors.NOFILESTORELEASE, "msg": "There are no files to be uploaded"}
 
-    if not self.repo.delete_release(self.release):
-      return {"error": Errors.CANNOTDELETERELEASE, "msg": "Cannot delete release: id {}".format(release)}
+    self.repo.delete_release(self.release)
 
     if not self.repo.create_release(self.release, draft=True):
       return {"error": Errors.CANNOTCREATERELEASE, "msg": "Cannot create release {}: {}".format(self.release, release)}
