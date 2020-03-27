@@ -1,1 +1,3 @@
-token:     <github user token>
+token:      <github user token>
+owner:      <github user name>
+repository: <github repository with admin access>
