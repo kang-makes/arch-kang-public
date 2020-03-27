@@ -7,6 +7,7 @@ import argparse
 import logging
 import sys
 import subprocess
+import mimetypes
 
 VERSION = str(subprocess.run(["git", "describe", "--tags", "--abbrev=0"], stdout=subprocess.PIPE).stdout, "UTF8").strip()
 
@@ -19,6 +20,7 @@ class Errors():
   CANNOTDELETERELEASE = "4"
   UNABLETOUPLOADAFILE = "5"
   UNABLETOPATCH       = "6"
+  NOFILESTORELEASE    = "7"
   UNEXISTENTERROR     = "254"
 
 class GitHub():
@@ -114,8 +116,9 @@ class GitHub():
       RELEASE=self.release_id,
       FILENAME=os.path.basename(file)
     )
-    with open(file, "rb") as files:
-      response = self.session.post(url, files={os.path.basename(file): files})
+    with open(file, "rb") as archive:
+      content_type = mimetypes.guess_type(file)
+      response = self.session.post(url, data=archive, headers={"Content-Type": "application/octet-stream"} )
 
     if response.status_code != 201:
       return {"error": Errors.UNABLETOUPLOADAFILE, "msg": response.json()["message"]}
