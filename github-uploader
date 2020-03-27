@@ -6,19 +6,26 @@ import os
 import argparse
 import logging
 import sys
+import subprocess
 
+VERSION = str(subprocess.run(["git", "describe", "--tags", "--abbrev=0"], stdout=subprocess.PIPE).stdout, "UTF8").strip()
 
 class Errors():
   """Errorlevels returns on diferente runtime errors"""
-  NOERROR = 0
-  NOCONF=1
-  NOPACKAGES=2
-
+  NOERROR             = "0"
+  NOCONF              = "1"
+  NOPACKAGES          = "2"
+  CANNOTCREATERELEASE = "3"
+  CANNOTDELETERELEASE = "4"
+  UNABLETOUPLOADAFILE = "5"
+  UNABLETOPATCH       = "6"
+  UNEXISTENTERROR     = "254"
 
 class GitHub():
   """Abstraction for this tools of the GitHub's API that we need"""
   SCHEMA = "https"
-  DOMAIN = "api.github.com"
+  API_DOMAIN = "api.github.com"
+  UPLOAD_DOMAIN = "uploads.github.com"
 
   def __init__(self, configuration):
     """Init GitHub's abstration using a configuration object"""
@@ -26,35 +33,139 @@ class GitHub():
     
     self.__dict__.update(**configuration)
     self.session = requests.Session()
-    self.session.headers["Authorization"] = self.token
+    self.session.auth = (self.owner, self.token)
 
-  def release_exists(self, release):
-    url = "{SCHEMA}://{DOMAIN}/repos/{OWNER}/{REPOSITORY}/{RELEASE}". format(
+  def create_release(self, release, draft=True, prerelease=False):
+    url = "{SCHEMA}://{API_DOMAIN}/repos/{OWNER}/{REPOSITORY}/releases".format(
       SCHEMA=GitHub.SCHEMA,
-      DOMAIN=GitHub.DOMAIN,
+      API_DOMAIN=GitHub.API_DOMAIN,
+      OWNER=self.owner,
+      REPOSITORY=self.repository
+    )
+    data = {
+      "tag_name": VERSION,
+      "name": release,
+      "draft": draft,
+      "prerelease": prerelease
+    }
+    response = self.session.post(url, json=data)
+    if response.status_code == 201:
+      r = response.json()
+      self.release_id = r["id"]
+      self.upload_url = r["upload_url"] # Unused because of hipermedia dependency
+      return response.json()["id"]
+
+  def delete_release(self, release=None):
+    url = "{SCHEMA}://{API_DOMAIN}/repos/{OWNER}/{REPOSITORY}/releases/{RELEASE}"
+    release_id = self.get_release_id(release) if release is not None else self.release_id
+    url = url.format(
+      SCHEMA=GitHub.SCHEMA,
+      API_DOMAIN=GitHub.API_DOMAIN,
       OWNER=self.owner,
       REPOSITORY=self.repository,
-      RELEASE=release
+      RELEASE=release_id
+    )
+    response = self.session.delete(url)
+    return response.status_code == 204
+
+  def flag_release(self, release=None, draft=False, prerelease=False, **extra_dict):
+    url = "{SCHEMA}://{API_DOMAIN}/repos/{OWNER}/{REPOSITORY}/releases/{RELEASE}"
+    release_id = self.get_release_id(release) if release is not None else self.release_id
+    url = url.format(
+      SCHEMA=GitHub.SCHEMA,
+      API_DOMAIN=GitHub.API_DOMAIN,
+      OWNER=self.owner,
+      REPOSITORY=self.repository,
+      RELEASE=release_id
+    )
+    patch = {
+      "draft": draft,
+      "prerelease": prerelease
+    }
+    patch.update(extra_dict)
+    response = self.session.patch(url, json=patch)
+
+    if response.status_code != 200:
+      return {"error": Errors.UNABLETOPATCH, "msg": response.json()["message"]}
+
+  def get_release_id(self, release):
+    url = "{SCHEMA}://{API_DOMAIN}/repos/{OWNER}/{REPOSITORY}/releases".format(
+      SCHEMA=GitHub.SCHEMA,
+      API_DOMAIN=GitHub.API_DOMAIN,
+      OWNER=self.owner,
+      REPOSITORY=self.repository
     )
     response = self.session.get(url)
-    return response.status_code == 200
+    releases = response.json()
+    for r in releases:
+      if r["name"] == release:
+        self.release_id = r["id"]
+        self.upload_url = r["upload_url"] # Unused because of hipermedia dependency
+        return r["id"]
+
+    return False
+
+  def upload_file(self, file):
+    url = "{SCHEMA}://{UPLOAD_DOMAIN}/repos/{OWNER}/{REPOSITORY}/releases/{RELEASE}/assets?name={FILENAME}".format(
+      SCHEMA=GitHub.SCHEMA,
+      UPLOAD_DOMAIN=GitHub.UPLOAD_DOMAIN,
+      OWNER=self.owner,
+      REPOSITORY=self.repository,
+      RELEASE=self.release_id,
+      FILENAME=os.path.basename(file)
+    )
+    with open(file, "rb") as files:
+      response = self.session.post(url, files={os.path.basename(file): files})
+
+    if response.status_code != 201:
+      return {"error": Errors.UNABLETOUPLOADAFILE, "msg": response.json()["message"]}
+
 
 class ReleaseUploader():
   def __init__(self, repo_service, release, files):
     today = datetime.datetime.now().strftime("%Y%m%d")
     self.repo = repo_service
     self.release = release
-    self.files = files
+
+    self.files = [ file for file in files if os.path.isfile(file) ]
+
+  def unroll_path(input_path):
+    files = set()
+
+    for root, folders, packages in os.walk(input_path):
+      for package in packages:
+        files.add(os.path.join(root, package))
+      for folder in folders:
+        files |= ReleaseUploader.unroll_path(os.path.join(root, folder))
+    
+    return files
+    
+  def unroll_paths(input_paths):
+    files = set()
+    for path in input_paths:
+      files |= ReleaseUploader.unroll_path(path)
+    return files
 
   def run(self):
-    if self.repo.release_exists(self.release):
-      self.repo.delete_release(self.release)
+    if len(self.files) == 0:
+      return {"error": Errors.NOFILESTORELEASE, "msg": "There are no files to be uploaded"}
 
-    self.repo.create_release(self.release, draft=True)
+    if not self.repo.delete_release(self.release):
+      return {"error": Errors.CANNOTDELETERELEASE, "msg": "Cannot delete release: id {}".format(release)}
+
+    if not self.repo.create_release(self.release, draft=True):
+      return {"error": Errors.CANNOTCREATERELEASE, "msg": "Cannot create release {}: {}".format(self.release, release)}
+
     for file in self.files:
-      self.repo.upload_file(file, self.release)
+      error = self.repo.upload_file(file)
+      if error:
+        return error
 
-    self.release.m
+    error = self.repo.flag_release(draft=False)
+    if error:
+      return error
+
+    return { "error": Errors.NOERROR }
 
 def main():
   """
@@ -62,6 +173,13 @@ def main():
   
   A release per month will be created.
   """
+
+  default_packages = []
+  if os.path.isdir("packages"):
+    for file in os.listdir("packages"):
+      if os.path.isfile(os.path.join("packages", file)):
+        default_packages.append(os.path.join("packages", file))
+    
 
   parser = argparse.ArgumentParser(description=main.__doc__)
   parser.add_argument("--conf",  "-c",
@@ -72,9 +190,9 @@ def main():
   parser.add_argument("packages",
                       type=str,
                       nargs="*",
-                      default="[packages]",
+                      default=default_packages,
                       metavar='package',
-                      help="Packages to add into the new repo")
+                      help="Packages to add into the new  (default: packages/*)")
   parser.add_argument("--debug", "-d",
                       action="store_true",
                       help="Add extra logging to this execution")
@@ -90,12 +208,16 @@ def main():
     logger.debug("%s exists and is being loaded", args.conf)
     unmarshalled_yaml = yaml.safe_load(configuration_file)
 
-  RepoService = GitHub
+  repo_service = GitHub(unmarshalled_yaml)
   release = datetime.date.today().replace(day=1).strftime("%Y%m")
+  uploader = ReleaseUploader(repo_service, release, args.packages)
 
-  repo_service = RepoService(unmarshalled_yaml)
+  upload = uploader.run()
   
-  return ReleaseUploader(repo_service, release, args.packages).run()
+  if upload["error"] != Errors.NOERROR:
+    logger.error(upload["msg"])
+
+  return upload["error"]
 
 if __name__ == "__main__":
   sys.exit(main())
