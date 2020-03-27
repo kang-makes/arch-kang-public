@@ -7,7 +7,6 @@ import argparse
 import logging
 import sys
 import subprocess
-import mimetypes
 
 VERSION = str(subprocess.run(["git", "describe", "--tags", "--abbrev=0"], stdout=subprocess.PIPE).stdout, "UTF8").strip()
 
