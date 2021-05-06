@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+
+from pycman import config
+import sys
+import json
+import pyalpm
+import copy
+import argparse
+
+PACMAN_CONFIG_FILE = "/etc/pacman.conf"
+PACKAGE_MANIFEST_FILE = "/etc/ansible/facts.d/pacman.fact"
+
+class RepositoryLister:
+  """A class that connect to pacman's database and list installed packages
+  and packages available to be downloaded on repos and provide some mathods
+  to get sets ready to to be serialized.
+  Also have a method to directly mashall to JSON."""
+
+  OUTPUT_SKEL = {
+    "native":  { "explicit": set(), "dependencies": set() },
+    "foreign": { "explicit": set(), "dependencies": set() }
+  }
+
+  def __init__(self, pacman_config_file):
+    """
+    Initializes package lister
+
+    :param pacman_config_file: Path to a config file 
+    :return: A list with filtered packages
+    """
+
+    self._repository_handler = config.init_with_config(pacman_config_file)
+
+    cached = set(self._repository_handler.get_localdb().pkgcache)
+    synced = set()
+    for db in self._repository_handler.get_syncdbs():
+      for package in db.pkgcache:
+        synced.add(package)
+
+    self._cached_names = set([ package.name for package in cached ])
+    self._synced_names = set([ package.name for package in synced ])
+    self._explicit_names = set()
+    self._dependant_names = set()
+
+    for package in cached:
+      if package.reason == pyalpm.PKG_REASON_EXPLICIT:
+        self._explicit_names.add(package.name)
+      elif package.reason == pyalpm.PKG_REASON_DEPEND:
+        self._dependant_names.add(package.name)
+      else:
+        pass
+
+
+  def get_native_synced_packages(self):
+    """
+    
+
+    :return: A list with filtered packages
+    """
+    return self._cached_names.intersection(self._synced_names)
+  
+  def get_native_explictly_installed_packages(self):
+    """
+
+    :return: A list with filtered packages
+    """
+    native_packages = self.get_native_synced_packages()    
+    return native_packages.intersection(self._explicit_names)
+
+  def get_native_installed_as_dep_packages(self):
+    """
+
+    :return: A list with filtered packages
+    """
+    native_packages = self.get_native_synced_packages()
+    return native_packages.intersection(self._dependant_names)
+
+
+  def get_foreign_synced_packages(self):
+    """
+
+    :return: A list with filtered packages
+    """
+    return self._cached_names.difference(self._synced_names)
+
+  def get_foreign_explictly_installed_packages(self):
+    """
+
+    :return: A list with filtered packages
+    """
+    foreign_packages = self.get_foreign_synced_packages()    
+    return foreign_packages.intersection(self._explicit_names)
+
+  def get_foreign_installed_as_dep_packages(self):
+    """
+
+    :return: A list with filtered packages
+    """
+    foreign_packages = self.get_foreign_synced_packages()
+    return foreign_packages.intersection(self._dependant_names)
+
+
+  def toJSON(self, sort_keys=False, indent=None):
+    """
+
+
+    :param sort_keys: 
+    :param indent: 
+    """
+    packages = copy.deepcopy(RepositoryLister.OUTPUT_SKEL)
+
+    packages["native"]["explicit"]      = list(self.get_native_explictly_installed_packages())
+    packages["native"]["dependencies"]  = list(self.get_native_installed_as_dep_packages())
+    packages["foreign"]["explicit"]     = list(self.get_foreign_explictly_installed_packages())
+    packages["foreign"]["dependencies"] = list(self.get_foreign_installed_as_dep_packages())
+
+    return json.dumps(packages, sort_keys=sort_keys, indent=indent, default=RepositoryLister.OUTPUT_SKEL )
+
+
+def argument_parser(args):
+  parser = argparse.ArgumentParser(description='Check docker containers.')
+  parser.add_argument('-c', '--config',
+                      dest='config',
+                      action='store',
+                      default=PACMAN_CONFIG_FILE,
+                      type=str,
+                      help='Where to find pacman config file (default: {default})')
+  parser.add_argument('-p ', '--pretty',
+                      dest='indent',
+                      action='store_const',
+                      const=2,
+                      default=None,
+                      help='Output a pretty JSON')
+  output = parser.add_mutually_exclusive_group()
+  output.add_argument('-o', '--output',
+                      dest='output',
+                      action='store',
+                      default=PACKAGE_MANIFEST_FILE,
+                      type=str,
+                      help='Where to output the manifest (default: {default})')
+  output.add_argument('-s ', '--to-stdout',
+                      dest='stdout',
+                      action='store_true',
+                      help='Output to stdout (short of `-o -`)')
+  return parser.parse_args(args)
+
+
+if __name__ == "__main__":
+  args = argument_parser(sys.argv[1:])
+
+  package_lister = RepositoryLister(args.config)
+  package_json = package_lister.toJSON(sort_keys=(args.indent is not None), indent=args.indent)
+
+  if args.stdout or args.output == "-":
+    print(package_json)
+  else:
+    manifest = open(args.output, 'w')
+    manifest.write(package_json)
+    manifest.close()

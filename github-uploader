@@ -44,7 +44,7 @@ class GitHub():
       REPOSITORY=self.repository
     )
     data = {
-      "tag_name": VERSION,
+      "tag_name": "{version}-{release}".format(version=VERSION, release=release),
       "name": release,
       "draft": draft,
       "prerelease": prerelease
@@ -116,7 +116,6 @@ class GitHub():
       FILENAME=os.path.basename(file)
     )
     with open(file, "rb") as archive:
-      content_type = mimetypes.guess_type(file)
       response = self.session.post(url, data=archive, headers={"Content-Type": "application/octet-stream"} )
 
     if response.status_code != 201:
@@ -160,7 +159,7 @@ class ReleaseUploader():
       if error:
         return error
 
-    error = self.repo.flag_release(draft=False)
+    error = self.repo.flag_release(release=self.release, draft=False)
     if error:
       return error
 
